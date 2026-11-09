@@ -1,0 +1,24 @@
+<main class="solar-login-page">
+ <section class="solar-login-context" aria-label="SolarOps">
+  <div class="solar-login-brand"><span><ui-icon name="activity"/></span><strong>SolarOps</strong></div>
+  <div class="solar-login-title"><h1>{{'Overvåking av solenergi' | t}}</h1><p>{{'Produksjon og utstyrsstatus' | t}}</p></div>
+  <span class="solar-login-version">SolarOps · 1.0</span>
+ </section>
+ <section class="solar-login-panel" [attr.aria-label]="'Logg inn' | t">
+  <div class="solar-login-preferences"><select [attr.aria-label]="'Velg språk' | t" [value]="s.l.language()" (change)="s.l.set($any($event.target).value)"><option value="nb">Norsk</option><option value="en">English</option></select><div role="group" [attr.aria-label]="'Fargetema' | t"><button type="button" [attr.aria-label]="'Mørkt tema' | t" [attr.aria-pressed]="theme.mode()==='dark'" (click)="theme.set('dark')"><ui-icon name="moon"/></button><button type="button" [attr.aria-label]="'Lyst tema' | t" [attr.aria-pressed]="theme.mode()==='light'" (click)="theme.set('light')"><ui-icon name="sun"/></button></div></div>
+  @if(s.loading()){<div class="solar-login-loading" role="status"><div class="spinner"></div>{{'Henter tilkobling …' | t}}</div>}@else{
+  <form #loginForm class="solar-login-form" (submit)="$event.preventDefault();submit(loginForm)" novalidate [attr.aria-busy]="submitting">
+   <header><h2>{{'Logg inn' | t}}</h2><p>{{'Bruk ThingsBoard-kontoen din.' | t}}</p></header>
+   @if(message){<div class="solar-login-error" role="alert"><ui-icon name="alert"/><span>{{message | t}}</span></div>}
+   <div class="solar-login-connection-test"><button type="button" [disabled]="submitting||testing()||missingEndpoint" (click)="testConnection()">{{(testing()?'Tester tilkobling …':'Test tilkobling') | t}}</button></div>
+   @if(connectionTest();as result){<p class="solar-login-test-result" [class.success]="result.ok" [attr.role]="result.ok?'status':'alert'">{{result.message | t}}</p>}
+   <label for="solar-login-username">{{'Brukernavn eller e-post' | t}}</label><input id="solar-login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required [readOnly]="submitting">
+   <label for="solar-login-password">{{'Passord' | t}}</label><div class="solar-login-password"><input id="solar-login-password" name="password" [type]="showPassword()?'text':'password'" autocomplete="current-password" required [readOnly]="submitting"><button type="button" [disabled]="submitting" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">{{(showPassword()?'Skjul':'Vis') | t}}</button></div>
+   <button type="submit" class="solar-login-submit" [disabled]="submitting||testing()||missingEndpoint"><span>{{(submitting?'Logger inn …':'Logg inn') | t}}</span><span aria-hidden="true">→</span></button>
+   <p class="solar-login-note">{{'Passordet lagres ikke.' | t}}</p>
+
+  </form>}
+  @if(s.preferences.error()){<p class="preferences-error" role="alert">{{s.preferences.error() | t}}</p>}
+  <footer>SolarOps <span>ThingsBoard</span></footer>
+ </section>
+</main>

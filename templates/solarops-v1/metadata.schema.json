@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:solarops:installation:metadata:1.0.0",
+  "title": "SolarOps entity server-side attributes v1",
+  "type": "object",
+  "required": [
+    "solaropsSchemaVersion",
+    "solaropsRole"
+  ],
+  "properties": {
+    "solaropsSchemaVersion": {
+      "const": "1.0.0"
+    },
+    "solaropsRole": {
+      "enum": [
+        "site",
+        "zone",
+        "pvArray",
+        "pvString",
+        "inverter",
+        "gridMeter",
+        "productionMeter",
+        "weatherStation",
+        "gateway",
+        "siteController",
+        "battery"
+      ]
+    },
+    "siteKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "equipmentKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dataSourceKind": {
+      "enum": [
+        "physical",
+        "simulation"
+      ]
+    },
+    "solaropsIntegrationProfile": {
+      "type": "string"
+    },
+    "expectedIntervalMs": {
+      "type": "number",
+      "minimum": 100
+    },
+    "staleAfterMs": {
+      "type": "number",
+      "minimum": 1000
+    },
+    "gridPowerSign": {
+      "const": "exportPositive"
+    },
+    "energyCounterKind": {
+      "enum": [
+        "unknown",
+        "lifetime",
+        "daily",
+        "resettable"
+      ]
+    },
+    "solaropsTelemetryMapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "key",
+          "unit"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "solaropsStateMapping": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "mppt",
+          "sleep",
+          "standby",
+          "startup",
+          "throttled",
+          "fault",
+          "unknown",
+          "running",
+          "stopped"
+        ]
+      }
+    },
+    "solaropsInverterConfiguration": {
+      "$ref": "urn:solarops:inverter-configuration:1"
+    },
+    "solaropsStringConfiguration": {
+      "$ref": "urn:solarops:string-configuration:1"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "solaropsRole": {
+            "const": "site"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "siteKey",
+          "timezone",
+          "dataSourceKind"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "solaropsRole": {
+            "enum": [
+              "inverter",
+              "pvArray",
+              "gridMeter",
+              "productionMeter",
+              "weatherStation",
+              "gateway",
+              "siteController",
+              "battery",
+              "pvString"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "equipmentKey"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "solaropsRole": {
+            "const": "inverter"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "solaropsTelemetryMapping"
+        ],
+        "properties": {
+          "solaropsTelemetryMapping": {
+            "required": [
+              "acPower"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "solaropsRole": {
+            "const": "pvString"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "solaropsStringConfiguration"
+        ]
+      }
+    }
+  ],
+  "additionalProperties": true
+}

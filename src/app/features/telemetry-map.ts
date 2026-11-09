@@ -1,0 +1,17 @@
+import {Component,input,output,ChangeDetectionStrategy} from '@angular/core';
+import {TranslatePipe} from '../core/locale';
+import type {FieldMapping} from '../domain/commission';
+export const inverterFields=['acPower','lifetimeEnergy','dcPower','dcVoltage','dcCurrent','acVoltage','acCurrent','frequency','cabinetTemperature','operatingState','rawOperatingState','runFeedback','faultActive'];
+export const dcFields=['dcPower','dcVoltage','dcCurrent'];
+export function fieldUnits(field:string):string[]{return /Power|gridExport/.test(field)?['W','kW','MW']:/Energy|^energy$/.test(field)?['Wh','kWh','MWh']:/Voltage/.test(field)?['V']:/Current/.test(field)?['A']:field==='frequency'?['Hz']:['cabinetTemperature','airTemperature'].includes(field)?['°C']:field==='irradiance'?['W/m²']:field==='cloudCover'?['%']:[''];}
+export function fieldName(field:string):string{return ({energy:'Energiteller',gridExport:'Netto mot nett',irradiance:'Solinnstråling',airTemperature:'Lufttemperatur',cloudCover:'Skydekke',acPower:'AC-effekt',lifetimeEnergy:'Energiteller',dcPower:'DC-effekt',dcVoltage:'DC-spenning',dcCurrent:'DC-strøm',acVoltage:'AC spenning L–L',acCurrent:'AC linjestrøm',frequency:'Frekvens',cabinetTemperature:'Temperatur',operatingState:'Driftsmodus',rawOperatingState:'Rå driftskode',runFeedback:'Driftssignal',faultActive:'Feilsignal'} as Record<string,string>)[field]??field;}
+@Component({selector:'telemetry-map',imports:[TranslatePipe],changeDetection:ChangeDetectionStrategy.OnPush,template:`<div class="inverter-map-head"><span>{{'Måling' | t}}</span><span>{{'ThingsBoard-nøkkel' | t}}</span><span>{{'Måleenhet' | t}}</span><span>{{'Siste råverdi' | t}}</span></div>@for(f of fields();track f){<div class="inverter-map-row"><span>{{name(f) | t}}@if(f==='acPower'){<b class="required"> *</b>}</span><select [attr.aria-label]="(name(f) | t)+' · '+scope()" [value]="mapping()[f]?.key||''" (change)="set(f,'key',$any($event.target).value)"><option value="">{{'Ikke målt' | t}}</option>@for(key of choices(f);track key){<option [value]="key" [selected]="mapping()[f]?.key===key">{{key}}</option>}</select><select [attr.aria-label]="('Måleenhet' | t)+' · '+f+' · '+scope()" [value]="mapping()[f]?.unit??''" [disabled]="!mapping()[f]?.key" (change)="set(f,'unit',$any($event.target).value)">@if(!units(f).includes('')){<option value="">{{'Velg måleenhet' | t}}</option>}@for(unit of units(f);track unit){<option [value]="unit" [selected]="unit===(mapping()[f]?.unit??'')">{{unit||('Kode / boolsk' | t)}}</option>}</select><small [class.mapping-missing]="!sample(f)">@if(sample(f);as v){<b>{{raw(v.value)}}</b><time>{{stamp(v.ts)}}</time>}@else{—}</small></div>}`})
+export class TelemetryMap {
+ mapping=input.required<Record<string,FieldMapping>>();fields=input<string[]>(dcFields);keys=input<string[]>([]);latest=input<Record<string,{ts:number;value:unknown}[]>>({});scope=input('');changed=output<Record<string,FieldMapping>>();
+ units=fieldUnits;name=fieldName;
+ choices(f:string){return [...new Set([...this.keys(),...(this.mapping()[f]?.key?[this.mapping()[f].key]:[])])];}
+ sample(f:string){return this.latest()[this.mapping()[f]?.key]?.at(-1);}
+ raw(v:unknown){return typeof v==='object'?JSON.stringify(v):String(v);}
+ stamp(ts:number){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+ set(f:string,property:'key'|'unit',value:string){const m=structuredClone(this.mapping());if(property==='key'&&!value)delete m[f];else m[f]={key:m[f]?.key??'',unit:m[f]?.unit??'',[property]:value};this.changed.emit(m);}
+}

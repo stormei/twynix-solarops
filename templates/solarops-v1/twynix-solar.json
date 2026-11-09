@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0.0",
+  "templateId": "twynix-solar-v1",
+  "site": {"name": "Twynix Solar Farm", "siteKey": "twynix-solar-farm", "timezone": "Europe/Oslo", "dataSourceKind": "simulation"},
+  "profiles": ["SolarOps Site v1", "SolarOps Zone v1", "SolarOps PV Array v1"],
+  "devices": [
+    {"name":"Twynix Solar - INV-101","role":"inverter","equipmentKey":"inv-101","adapter":"inverter"},
+    {"name":"Twynix Solar - INV-102","role":"inverter","equipmentKey":"inv-102","adapter":"inverter"},
+    {"name":"Twynix Solar - INV-103","role":"inverter","equipmentKey":"inv-103","adapter":"inverter"},
+    {"name":"Twynix Solar - PV-101","role":"pvArray","equipmentKey":"pv-101","adapter":"array"},
+    {"name":"Twynix Solar - PV-102","role":"pvArray","equipmentKey":"pv-102","adapter":"array"},
+    {"name":"Twynix Solar - PV-103","role":"pvArray","equipmentKey":"pv-103","adapter":"array"},
+    {"name":"Twynix Solar - GM-101","role":"gridMeter","equipmentKey":"grid-101","adapter":"meter"},
+    {"name":"Twynix Solar - Simulation","role":"siteController","equipmentKey":"controller","adapter":"controller"}
+  ],
+  "feeds": [["pv-101","inv-101"],["pv-102","inv-102"],["pv-103","inv-103"]],
+  "adapters": {
+    "inverter": {"acPower":{"key":"ACPower","unit":"kW"},"dcPower":{"key":"DCPower","unit":"kW"},"dcVoltage":{"key":"DCVoltage","unit":"V"},"dcCurrent":{"key":"DCCurrent","unit":"A"},"lifetimeEnergy":{"key":"Energy","unit":"kWh"},"cabinetTemperature":{"key":"Temperature","unit":"°C"},"acVoltage":{"key":"ACVoltage","unit":"V"},"acCurrent":{"key":"ACCurrent","unit":"A"},"frequency":{"key":"Frequency","unit":"Hz"},"ratedAcPower":{"key":"RatedPower","unit":"kW"},"operatingState":{"key":"OperatingState","unit":""},"runFeedback":{"key":"RunFeedback","unit":""},"faultActive":{"key":"FaultActive","unit":""}},
+    "array": {"dcPower":{"key":"DCPower","unit":"kW"}},
+    "meter": {"gridExport":{"key":"ExportPower","unit":"kW"}},
+    "controller": {"acPower":{"key":"SolarACPower","unit":"kW"},"dcPower":{"key":"SolarDCPower","unit":"kW"},"energy":{"key":"SolarEnergy","unit":"kWh"},"gridExport":{"key":"GridExportPower","unit":"kW"},"irradiance":{"key":"WeatherIrradiance","unit":"W/m²"},"airTemperature":{"key":"WeatherTemperature","unit":"°C"},"cloudCover":{"key":"WeatherCloudCover","unit":"%"}}
+  }
+}

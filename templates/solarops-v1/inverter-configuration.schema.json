@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:solarops:inverter-configuration:1",
+  "title": "SolarOps inverter DC configuration v1",
+  "type": "object",
+  "required": [
+    "version",
+    "manufacturer",
+    "model",
+    "energyCounterKind",
+    "mppts"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "manufacturer": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "model": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "energyCounterKind": {
+      "enum": [
+        "unknown",
+        "lifetime",
+        "daily",
+        "resettable"
+      ]
+    },
+    "mppts": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "inputs",
+          "mapping"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{1,60}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1
+          },
+          "inputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[-a-z0-9]{1,60}$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120,
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "mapping": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dcPower": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "unit"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "unit": {
+                    "enum": [
+                      "W",
+                      "kW",
+                      "MW"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "dcVoltage": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "unit"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "unit": {
+                    "enum": [
+                      "V"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "dcCurrent": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "unit"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "unit": {
+                    "enum": [
+                      "A"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

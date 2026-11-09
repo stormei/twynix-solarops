@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0.0",
+  "templateId": "solarops-minimal-v1",
+  "site": {"name": "My solar installation", "siteKey": "my-solar-site", "timezone": "Europe/Oslo", "dataSourceKind": "physical"},
+  "profiles": ["SolarOps Site v1", "SolarOps Zone v1", "SolarOps PV Array v1"],
+  "devices": [{"name":"REPLACE WITH EXISTING DEVICE NAME","role":"inverter","equipmentKey":"inv-001","adapter":"inverter"}],
+  "feeds": [],
+  "adapters": {"inverter":{"acPower":{"key":"acPower","unit":"W"}}}
+}

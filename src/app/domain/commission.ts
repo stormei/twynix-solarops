@@ -1,0 +1,6 @@
+export interface FieldMapping {key:string;unit:string}
+export interface CommissionRow {equipmentKey:string;role:string;kind:'device'|'asset';deviceId?:string;measurementDeviceId?:string;name:string;mapping:Record<string,FieldMapping>;feedsTo?:string;gridSignConfirmed?:boolean}
+export interface CommissionDraft {templateId:string;site:{name:string;siteKey:string;timezone:string;dataSourceKind:'physical'|'simulation'};equipment:CommissionRow[]}
+export interface CommissionChange {kind:'asset'|'profile'|'attributes'|'relation';target:string;description:string;before?:unknown;after?:unknown}
+export interface CommissionReview {id:string;digest:string;expiresAt:number;siteName:string;existingSiteId:string|null;canSave:boolean;issues:{severity:'error'|'warning';entity:string;message:string}[];changes:CommissionChange[];counts:{assets:number;profiles:number;devices:number;attributes:number;relations:number};equipment:{name:string;equipmentKey:string;role:string;kind:string;deviceId?:string;mapping:Record<string,FieldMapping>;feedsTo?:string}[]}
+export interface CommissionTemplate {id:string;templateId:string;site:CommissionDraft['site'];devices:{name:string;role:string;equipmentKey:string;adapter:string}[];adapters:Record<string,Record<string,FieldMapping>>;feeds:[string,string][]}

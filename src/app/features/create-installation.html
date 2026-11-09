@@ -1,0 +1,45 @@
+<div class="commission-flow initial-setup"><aside class="commission-rail"><span class="setup-rail-title">SolarOps</span><ol class="setup-steps create-steps">@for(label of ['Anlegg og invertere','Kontroller avlesninger','Start overvåking'];track $index){<li [class.current]="step()===$index+1" [class.complete]="step()>$index+1" [attr.aria-current]="step()===$index+1?'step':null"><span>{{$index+1}}</span>{{label | t}}</li>}</ol><small>{{instance()}}</small></aside>
+<div class="commission-content">
+ @if(error()){<div class="error-banner" role="alert"><ui-icon name="alert"/>{{error() | t}}</div>}
+ @if(busy()&&!devices().length){<p role="status">{{'Henter ThingsBoard-enheter …' | t}}</p>}
+ @if(!canCreate()&&!busy()){<p>{{'En ThingsBoard-administrator må opprette anlegget.' | t}}</p><button (click)="cancelled.emit()">{{'Tilbake' | t}}</button>}
+ @if(canCreate()){
+ @if(step()===1){
+  <header class="setup-intro"><div><h3>{{'Start med inverterne' | t}}</h3><p>{{'Velg enhetene som representerer inverterne dine.' | t}}</p></div></header>
+  <label class="initial-site-name">{{'Anleggsnavn' | t}}<input maxlength="120" autocomplete="off" [value]="draft().site.name" (input)="name($any($event.target).value)" [placeholder]="'Mitt solcelleanlegg' | t"></label>
+  <div class="initial-device-heading"><h4>{{'Identifiserte invertere' | t}}</h4><div class="initial-device-actions">@if(inverterCount()){<button type="button" [disabled]="busy()||!pendingInverters().length" (click)="selectAll()">{{(bulkSelecting()?'Velger invertere …':'Velg alle invertere') | t}}</button>}<span role="status" aria-live="polite">{{draft().equipment.length}} {{'valgt' | t}}</span></div></div>
+  @if(inverterCount()>6){<input type="search" class="initial-device-search" [attr.aria-label]="'Søk etter enhet' | t" [placeholder]="'Søk etter enhet' | t" [value]="deviceSearch()" (input)="deviceSearch.set($any($event.target).value)">}
+  <div class="initial-device-list">@for(device of deviceList();track device.id.id){<label class="initial-device" [class.selected]="selected(device.id.id)" [class.unavailable]="!!unavailable(device.id.id)"><input type="checkbox" [checked]="selected(device.id.id)" [disabled]="busy()||!!unavailable(device.id.id)||(!selected(device.id.id)&&draft().equipment.length>=32)" (change)="toggle(device,$event)"><span><b>{{device.label||device.name}}</b>@if(mappingSummary(device)){<small class="initial-saved-mapping">{{mappingSummary(device)}}</small>}@else if(device.label&&device.label!==device.name){<small>{{device.name}}</small>}</span>@if(unavailable(device.id.id)){<small>{{unavailable(device.id.id) | t}}</small>}@else{<small class="initial-mapping-badge">{{(device.savedMappings.acPower?'Lagret kartlegging':'Velg målinger') | t}}</small>}</label>}@empty{<p class="initial-no-devices">{{(inverterCount()?'Ingen treff.':'Ingen invertere har en deklarert rolle ennå.') | t}}</p>}</div>
+  @if(otherDeviceCount()){
+   <details class="initial-other-devices" [open]="!inverterCount()"><summary>{{'Andre enheter' | t}} ({{otherDeviceCount()}})</summary>
+    @if(otherDeviceCount()>6){<input type="search" class="initial-device-search" [attr.aria-label]="'Søk i andre enheter' | t" [placeholder]="'Søk i andre enheter' | t" [value]="otherSearch()" (input)="otherSearch.set($any($event.target).value)">}
+    <div class="initial-device-list">@for(device of otherDevices();track device.id.id){<label class="initial-device" [class.selected]="selected(device.id.id)" [class.unavailable]="!!unavailable(device.id.id)"><input type="checkbox" [checked]="selected(device.id.id)" [disabled]="busy()||!!unavailable(device.id.id)||(!selected(device.id.id)&&draft().equipment.length>=32)" (change)="toggle(device,$event)"><span><b>{{device.label||device.name}}</b><small>{{(device.identification==='unavailable'?'Kunne ikke lese metadata':device.identification==='other'?'Annet utstyr':'Uklassifisert enhet') | t}}</small></span>@if(device.identification!=='other'&&unavailable(device.id.id)){<small>{{unavailable(device.id.id) | t}}</small>}</label>}@empty{<p class="initial-no-devices">{{'Ingen treff.' | t}}</p>}</div>
+   </details>
+  }
+  @if(source().conflict){<p class="setup-issue blocking" role="alert">{{'Velg enten fysiske eller simulerte enheter i samme anlegg.' | t}}</p>}
+  @if(draft().equipment.length&&source().unclassified&&!source().conflict){<label class="initial-source">{{'Er dette fysisk utstyr eller en simulator?' | t}}<select [value]="sourceChoice()" (change)="sourceChoice.set($any($event.target).value)"><option value="">{{'Velg datakilde' | t}}</option><option value="physical" [disabled]="source().kind==='simulation'">{{'Fysisk anlegg' | t}}</option><option value="simulation" [disabled]="source().kind==='physical'">{{'Simulator' | t}}</option></select></label>}
+  <p class="initial-later-note">{{'PV-felt, strenger og annet utstyr kan legges til etterpå.' | t}}</p>
+  <div class="setup-actions"><button [disabled]="busy()" (click)="cancelled.emit()">{{'Avbryt' | t}}</button><button class="primary" [disabled]="busy()||!canContinue()" (click)="continue()">{{'Fortsett' | t}} →</button></div>
+ }
+ @if(step()===2){
+  <header class="setup-intro"><div><h3>{{'Kontroller avlesningene' | t}}</h3><p>{{'Effekt er påkrevd. Energiteller er valgfri.' | t}}</p></div></header>
+  @if(draft().equipment.length>1){<nav class="initial-inverter-tabs" [attr.aria-label]="'Valgte invertere' | t">@for(row of draft().equipment;track row.deviceId;let i=$index){<button [attr.aria-pressed]="activeRow()===i" (click)="activeRow.set(i)">{{rowName(row)}}@if(readiness(row).errors.length){<span aria-label="!">!</span>}</button>}</nav>}
+  @if(draft().equipment[activeRow()];as row){<section class="initial-reading-panel"><div class="section-heading"><h4>{{rowName(row)}}</h4><button [disabled]="busy()" (click)="refresh(row)">{{'Oppdater' | t}}</button></div>
+   <telemetry-map [scope]="row.equipmentKey" [mapping]="row.mapping" [fields]="['acPower','lifetimeEnergy']" [keys]="keys(row)" [latest]="latest(row)" (changed)="setMapping(activeRow(),$event)"/>
+   @for(message of readiness(row).errors;track message){<p class="setup-issue blocking" role="alert">{{message | t}}</p>}
+   <p class="initial-status-note"><span class="dot" [class.muted-dot]="!statusMapped(row)"></span>{{(statusMapped(row)?'Eksisterende statussignaler beholdes.':'Inverterstatus kan konfigureres etterpå.') | t}}</p>
+  </section>}
+  <div class="setup-actions"><button [disabled]="busy()" (click)="step.set(1);error.set('')">{{'Tilbake' | t}}</button><button class="primary" [disabled]="busy()||errors()>0" (click)="preview()">{{(busy()?'Kontrollerer …':'Gjennomgå') | t}} →</button></div>
+ }
+ @if(step()===3){
+  @if(review();as r){<header class="setup-intro"><div><h3>{{'Klar til å starte' | t}}</h3><p>{{r.siteName}} · {{draft().equipment.length}} {{'invertere' | t}}</p></div></header>
+   <div class="initial-review">@for(row of draft().equipment;track row.deviceId){<div><ui-icon name="inverter"/><b>{{rowName(row)}}</b><span>{{row.mapping['acPower']?.key}} · {{row.mapping['acPower']?.unit}}</span><small>{{(row.mapping['lifetimeEnergy']?.key?'Effekt og energi':'Kun effekt') | t}}</small></div>}</div>
+   <p class="initial-review-timezone">{{'Tidssone' | t}} · {{draft().site.timezone}}</p>
+   @for(issue of reviewIssues();track $index){<div class="setup-issue" [class.blocking]="issue.severity==='error'"><b>{{issue.entities.join(', ')}}</b><p>{{issue.message | t}}</p></div>}
+   <p class="initial-later-note">{{'Lagrer anlegget og enhetstilknytningen i ThingsBoard. Eksisterende historikk beholdes.' | t}}</p>
+   <details class="commission-change-list"><summary>{{'Vis lagringsdetaljer' | t}}</summary>@for(change of r.changes;track $index){<div><span>{{changeLabel(change) | t}}</span><b>{{change.kind==='asset'?change.description:change.target}}</b></div>}</details>
+   <div class="setup-actions"><button [disabled]="busy()" (click)="step.set(2);error.set('')">{{'Tilbake' | t}}</button><button class="primary" [disabled]="busy()||!r.canSave" (click)="save()">{{(busy()?'Lagrer …':'Start overvåking') | t}} →</button></div>
+  }@else{<div class="setup-actions"><button (click)="step.set(2)">{{'Tilbake til avlesninger' | t}}</button><button [disabled]="busy()" (click)="preview()">{{'Kontroller på nytt' | t}}</button></div>}
+ }
+ }
+</div></div>

@@ -1,0 +1,12 @@
+import type {SingleLineTelemetry,ArrayTelemetry,GridTelemetry} from '../src/app/domain/single-line.ts';
+import {measurement,booleanValue} from '../src/app/domain/solar.ts';
+import {ApiError,type ThingsBoard,type Discovery,type Entity} from './thingsboard.ts';
+import {measured} from './measurements.ts';
+export async function singleLineTelemetry(tb:ThingsBoard,discovery:Discovery,now=Date.now()):Promise<SingleLineTelemetry>{
+ const read=async(entity:Entity,mapping:Record<string,{key:string;unit:string}>)=>{try{const [latest,attributes]=await Promise.all([tb.latest(entity.id.id,mapping),tb.attributes(entity.id.id)]);return {latest,connected:booleanValue(attributes.find(a=>a.key==='active')?.value)};}catch(e){if(e instanceof ApiError&&[401,403].includes(e.status))throw e;return {latest:{},connected:null};}};
+ const arrays:ArrayTelemetry[]=[];
+ for(const entity of discovery.arrays){const source=entity.id.entityType==='DEVICE'?entity:discovery.all.find(d=>d.id.id===entity.solarops?.solaropsMeasurementDeviceId),mapping=entity.solarops?.solaropsTelemetryMapping??source?.solarops?.solaropsTelemetryMapping??{},staleAfterMs=source?.solarops?.staleAfterMs??entity.solarops?.staleAfterMs??tb.config.staleMs,data=source?await read(source,mapping):{latest:{},connected:null};arrays.push({id:entity.id.id,name:entity.label||entity.name,equipmentKey:entity.solarops?.equipmentKey??entity.label??entity.name,measurementDeviceId:source?.id.id??null,feedsTo:[...new Set((discovery.relations??[]).filter(r=>r.type==='Feeds'&&r.from.id===entity.id.id&&discovery.devices.some(i=>i.id.id===r.to.id)).map(r=>r.to.id))],dc:measured(data.latest,mapping.dcPower,'kW',now,staleAfterMs),connected:data.connected,staleAfterMs});}
+ let grid:GridTelemetry|null=null;
+ for(const source of [discovery.meter,discovery.controller]){if(!source)continue;const mapping=source.solarops?.solaropsTelemetryMapping??(source===discovery.controller?tb.config.siteMapping:undefined)??{};if(!mapping.gridExport||source.solarops?.gridPowerSign!=='exportPositive')continue;const staleAfterMs=source.solarops?.staleAfterMs??tb.config.staleMs,data=await read(source,{gridExport:mapping.gridExport});grid={id:source.id.id,name:source.label||source.name,source:source===discovery.meter?'meter':'controller',power:measured(data.latest,mapping.gridExport,'kW',now,staleAfterMs),connected:data.connected,staleAfterMs};break;}
+ return {arrays,grid,dcTopologyKnown:!!discovery.relations};
+}

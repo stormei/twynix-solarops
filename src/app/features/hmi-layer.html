@@ -1,0 +1,23 @@
+@for(w of wires();track w.id){<svg:g class="hmi-wire" [class.dc]="w.circuit==='dc'" [class.selected]="selected()===w.id" role="button" tabindex="0" [attr.aria-label]="('Tegningsforbindelse' | t)+' '+w.circuit.toUpperCase()" (pointerdown)="$event.stopPropagation();selection.emit(w.id)" (keydown.enter)="$event.stopPropagation();selection.emit(w.id)"><svg:path class="hmi-wire-hit" [attr.d]="w.path"/><svg:path class="hmi-wire-line" [attr.d]="w.path"/></svg:g>}
+@for(e of elements();track e.id){<svg:g class="hmi-element" [class.selected]="selected()===e.id" [class.hmi-area]="e.kind==='area'" [attr.transform]="'translate('+e.x+','+e.y+')'" [attr.data-hmi-id]="e.id" role="button" tabindex="0" [attr.aria-label]="e.label" (pointerdown)="start($event,e)" (keydown)="key($event,e)" (contextmenu)="$event.preventDefault();$event.stopPropagation();selection.emit(e.id)">
+<svg:title>{{e.label}}</svg:title><svg:rect class="hmi-element-frame" [attr.width]="e.width" [attr.height]="e.height" rx="2"/>
+@switch(e.kind){
+ @case('acBus'){<svg:path class="hmi-bus ac" [attr.d]="'M 12 '+e.height/2+' H '+(e.width-12)"/>}
+ @case('dcBus'){<svg:path class="hmi-bus dc" [attr.d]="'M 12 '+(e.height/2-4)+' H '+(e.width-12)+' M 12 '+(e.height/2+4)+' H '+(e.width-12)"/>}
+ @case('breaker'){<svg:path class="hmi-symbol" d="M 12 48 H 48 M 48 36 V 60 H 68 V 36 Z M 68 48 H 110"/><svg:text x="12" y="74" class="hmi-quality">{{'Posisjon ukjent' | t}}</svg:text>}
+ @case('isolator'){<svg:path class="hmi-symbol" d="M 12 48 H 45 L 72 30 M 76 48 H 110"/><svg:circle class="hmi-symbol" cx="45" cy="48" r="3"/><svg:circle class="hmi-symbol" cx="76" cy="48" r="3"/><svg:text x="12" y="74" class="hmi-quality">{{'Posisjon ukjent' | t}}</svg:text>}
+ @case('transformer'){<svg:circle class="hmi-symbol" cx="50" cy="49" r="19"/><svg:circle class="hmi-symbol" cx="76" cy="49" r="19"/><svg:path class="hmi-symbol" d="M 12 49 H 31 M 95 49 H 116"/>}
+ @case('grid'){<svg:path class="hmi-symbol" d="M 58 30 V 70 M 35 38 H 81 M 42 50 H 74 M 48 62 H 68 M 58 30 L 32 76 M 58 30 L 84 76"/>}
+ @case('load'){<svg:path class="hmi-symbol" d="M 25 75 V 39 L 62 25 L 98 39 V 75 Z M 47 75 V 53 H 76 V 75"/>}
+ @case('meter'){<svg:circle class="hmi-symbol" cx="54" cy="51" r="22"/><svg:text x="54" y="55" text-anchor="middle" class="hmi-meter-letter">M</svg:text>}
+}
+<svg:text x="12" y="20" class="hmi-title">{{e.label}}</svg:text>
+@if(['value','trend','meter'].includes(e.kind)){
+ @if(e.kind==='value'){<svg:text x="12" y="52" class="hmi-value" [class.stale]="value(e).measurement.quality!=='good'">{{s.format(value(e).measurement.value,2)}} <svg:tspan class="hmi-unit">{{value(e).unit}}</svg:tspan></svg:text><svg:text x="12" y="74" class="hmi-quality">{{quality(e)}}</svg:text>}
+ @if(e.kind==='meter'){<svg:text x="88" y="49" class="hmi-meter-value">{{s.format(value(e).measurement.value,2)}}</svg:text><svg:text x="88" y="68" class="hmi-quality">{{value(e).unit}} · {{quality(e)}}</svg:text>}
+ @if(e.kind==='trend'){@if(trend(e)){<svg:path class="hmi-trend" [attr.d]="trend(e)"/>} @else{<svg:text x="12" y="55" class="hmi-quality">{{'Ingen historikk' | t}}</svg:text>}}
+}
+@if(editable()&&connecting()){<svg:circle class="hmi-connect-port" cx="0" [attr.cy]="e.height/2" r="7"/><svg:circle class="hmi-connect-port" [attr.cx]="e.width" [attr.cy]="e.height/2" r="7"/>}
+</svg:g>}
+
+@for(w of wires();track w.id){@if(editable()&&selected()===w.id){<svg:circle class="hmi-route-handle" [attr.cx]="w.handle.x" [attr.cy]="w.handle.y" r="7" [attr.aria-label]="'Flytt kabelhjørne' | t" (pointerdown)="startWire($event,w.id,w.handle.x)"/>}}

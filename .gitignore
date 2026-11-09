@@ -147,3 +147,21 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+node_modules/
+dist/
+.angular/
+.env
+*.log
+.DS_Store
+.runtime/
+
+.env.*.tmp
+
+# Local credentials and workstation settings
+.env.*
+!.env.example
+.codex/
+.agents/
+
+# Hosting account bindings stay local
+.openai/

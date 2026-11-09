@@ -1,0 +1,7 @@
+import '@angular/compiler';
+import {signal} from '@angular/core';
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {ConfigureInverter} from '../src/app/features/configure-inverter.ts';
+test('aggregate configuration skips unknown electrical detail and can return to telemetry',()=>{const c=Object.create(ConfigureInverter.prototype) as ConfigureInverter;Object.assign(c,{step:signal(1),detailMode:signal('aggregate'),error:signal(''),telemetryErrors:()=>[],steps:['Device','Telemetry','MPPT','Strings','Review']});assert.deepEqual(c.visibleSteps().map(s=>s.index),[0,1,4]);c.next();assert.equal(c.step(),4);c.back();assert.equal(c.step(),1);c.detailMode.set('detailed');c.next();assert.equal(c.step(),2);assert.equal(c.visibleSteps().length,5);});
+test('new strings do not invent module quantities and choose the array feeding their inverter',()=>{const c=Object.create(ConfigureInverter.prototype) as ConfigureInverter;Object.assign(c,{config:()=>({mppts:[{id:'mppt-1',inputs:[{id:'input-1'}]}]}),draft:()=>({nodes:[]}),inverter:()=>({id:'inv-2',name:'INV-2'}),physicalParents:()=>[{id:'array-1',role:'pvArray',feedsTo:'inv-1'},{id:'array-2',role:'pvArray',feedsTo:'inv-2'}],assets:signal([]),strings:signal([]),activeString:signal(''),touched:signal(false)});c.addString();assert.equal(c.strings()[0].parentId,'array-2');assert.equal(c.strings()[0].stringConfig!.moduleCount,0);assert.equal(c.strings()[0].stringConfig!.modulePowerW,0);});

@@ -1,0 +1,116 @@
+import {HmiLayer} from './hmi-layer';
+import {inverterMode,inverterCommunication} from '../domain/operations';
+import {stateNames} from '../domain/solar';
+import {Preferences} from '../core/preferences';
+import {selectionUnits,alignGroups,distributeGroups} from '../domain/diagram-groups';
+import {EquipmentGlyph} from '../shared/equipment-glyph';
+import {contextMenuPoint} from '../domain/context-menu';
+import {snapSelection,readSnapPreferences,snapPreferenceKey,type AlignmentGuide} from '../domain/diagram-snapping';
+import {DOCUMENT} from '@angular/common';
+import {selectionBounds,moveSelection,alignSelection,distributeSelection,boxedSelection,type Alignment} from '../domain/diagram-selection';
+import {zoomAt,wheelZoom} from '../domain/diagram-viewport';
+import {Component,ChangeDetectionStrategy,input,output,signal,computed,inject,DestroyRef,Injector,afterNextRender,ViewChild,ElementRef,HostListener} from '@angular/core';
+import {Store} from '../core/store';
+import {inverterReading} from '../domain/inverter-live';
+import {TranslatePipe} from '../core/locale';
+import type {InstallationNode} from '../domain/installation';
+import {arrange,canParent,canFeed,dcTarget,CARD_W,CARD_H,snap,wirePath,expandGroups,groupSelection,ungroupSelection,type DiagramLayout,type Point} from '../domain/diagram';
+@Component({selector:'installation-diagram',imports:[TranslatePipe,EquipmentGlyph,HmiLayer],templateUrl:'./installation-diagram.html',changeDetection:ChangeDetectionStrategy.OnPush})
+export class InstallationDiagram {
+ @ViewChild(HmiLayer) hmiLayer?:HmiLayer;viewer=input(false);hmiSelected=input('');hmiSelection=output<string>();
+ operatingMode(n:InstallationNode){return inverterMode(this.live(n),this.now());}
+ state(n:InstallationNode){return this.s.l.t(stateNames[this.operatingMode(n).state]);}
+ communication(n:InstallationNode){return this.s.l.t(inverterCommunication(this.live(n)));}
+
+ toggleHmiWiring(){this.cancel();this.mode.set('move');this.hmiLayer?.toggleWiring();}
+ private preferences=inject(Preferences);private document=inject(DOCUMENT);private injector=inject(Injector);
+ @ViewChild('drawingContextMenu') private contextElement?:ElementRef<HTMLElement>;
+ snapping=computed(()=>({grid:this.preferences.value().snapGrid,guides:this.preferences.value().alignmentGuides}));guides=signal<AlignmentGuide[]>([]);
+ toggleSnapping(key:'grid'|'guides'){this.preferences.save(key==='grid'?{snapGrid:!this.snapping().grid}:{alignmentGuides:!this.snapping().guides});}
+ s=inject(Store);now=signal(Date.now());
+ constructor(){const timer=setInterval(()=>this.now.set(Date.now()),1000);inject(DestroyRef).onDestroy(()=>clearInterval(timer));}
+ live(n:InstallationNode){return n.role==='inverter'?this.s.inverters().find(i=>i.id===n.id):undefined;}
+ ac(n:InstallationNode){return inverterReading(this.live(n),'acPower',this.now());}
+ nodes=input.required<InstallationNode[]>();layout=input<DiagramLayout>();selected=input('');selection=input<string[]>([]);selectionChange=output<string[]>();editable=input(false);
+ selectNode=output<string>();editDetails=output<void>();layoutChange=output<DiagramLayout>();parentChange=output<{id:string;parentId:string}>();feedChange=output<{id:string;feedsTo:string|null}>();addEquipment=output<{kind:string;parentId?:string;point:Point}>();
+ commandsEnabled=input(false);pasteAvailable=input(false);copyRequested=output<void>();pasteRequested=output<void>();duplicateRequested=output<void>();deleteRequested=output<void>();renameRequested=output<string>();
+ contextPoint=signal<Point|null>(null);
+ copyableSelection=computed(()=>this.activeIds().some(id=>this.nodes().some(n=>n.id===id&&n.role!=='site')));
+ alignmentActions=[{id:'left',label:'Venstre kant'},{id:'center',label:'Sentrer vannrett'},{id:'right',label:'Høyre kant'},{id:'top',label:'Øvre kant'},{id:'middle',label:'Sentrer loddrett'},{id:'bottom',label:'Nedre kant'}];
+ openContext(event:MouseEvent,id?:string){event.preventDefault();event.stopPropagation();if(this.viewer()||this.drag)return;this.showContext(event.clientX,event.clientY,id);}
+ reopenContext(event:MouseEvent){event.preventDefault();event.stopPropagation();const svg=this.document.querySelector('.diagram-canvas'),r=svg?.getBoundingClientRect();if(!r||event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom){this.closeContext();return;}const item=this.document.elementsFromPoint(event.clientX,event.clientY).map(e=>e.closest('.diagram-equipment')).find(Boolean);this.showContext(event.clientX,event.clientY,item?.getAttribute('data-node-id')??undefined);}
+ private showContext(x:number,y:number,id?:string){this.cancel();if(id&&!this.isSelected(id))this.selectionChange.emit(expandGroups([id],this.layout()?.groups));const win=this.document.defaultView;this.contextPoint.set(contextMenuPoint(x,y,win?.innerWidth??1280,win?.innerHeight??720));if(this.injector)afterNextRender(()=>{if(!this.contextPoint())return;const menu=this.contextElement?.nativeElement;if(!menu)return;const r=menu.getBoundingClientRect();this.contextPoint.set(contextMenuPoint(x,y,win?.innerWidth??1280,win?.innerHeight??720,r.width,r.height));menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();},{injector:this.injector});}
+ closeContext(focus=false){this.contextPoint.set(null);if(focus&&this.injector)afterNextRender(()=>this.document.querySelector<SVGSVGElement>('.diagram-canvas')?.focus(),{injector:this.injector});}
+ @HostListener('window:resize') closeContextOnResize(){this.closeContext();}
+ contextCommand(command:string){if(!this.commandsEnabled())return;if(command==='paste'&&!this.pasteAvailable())return;if(command==='rename'&&!this.renameableGroup())return;if(['copy','duplicate','delete'].includes(command)&&!this.copyableSelection())return;this.closeContext(command==='copy');switch(command){case 'copy':this.copyRequested.emit();break;case 'paste':this.pasteRequested.emit();break;case 'duplicate':this.duplicateRequested.emit();break;case 'delete':this.deleteRequested.emit();break;case 'group':this.group();break;case 'ungroup':this.ungroup();break;case 'rename':this.renameRequested.emit(this.renameableGroup()!.id);break;}}
+ contextAlign(value:string){if(!this.commandsEnabled()||this.mode()!=='move')return;this.closeContext(true);this.align(value);}
+ contextDistribute(value:string){if(!this.commandsEnabled()||this.mode()!=='move')return;this.closeContext(true);this.distribute(value);}
+ contextKey(event:KeyboardEvent){if(event.key==='Escape'||event.key==='Tab'){event.preventDefault();event.stopPropagation();this.closeContext(true);return;}const commands:Record<string,string>={c:'copy',v:'paste',d:'duplicate'};if((event.ctrlKey||event.metaKey)&&commands[event.key.toLowerCase()]){event.preventDefault();event.stopPropagation();this.contextCommand(commands[event.key.toLowerCase()]);return;}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='g'){event.preventDefault();event.stopPropagation();this.contextCommand(event.shiftKey?'ungroup':'group');return;}if(event.key==='Delete'){event.preventDefault();event.stopPropagation();this.contextCommand('delete');return;}if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();const buttons=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));if(!buttons.length)return;const current=buttons.indexOf(this.document.activeElement as HTMLButtonElement);let next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(current+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}
+ panning=signal(false);mode=signal<'move'|'parent'|'wire'>('move');zoom=signal(1);pan=signal<Point>({x:0,y:0});source=signal('');hover=signal('');message=signal('');wireSelected=signal('');pointer=signal<Point|null>(null);preview=signal<Record<string,Point>>({});
+ activeIds=computed(()=>{const valid=new Set(this.nodes().map(n=>n.id));return expandGroups(this.selection().includes(this.selected())?this.selection().filter(id=>valid.has(id)):valid.has(this.selected())?[this.selected()]:[],this.layout()?.groups).filter(id=>valid.has(id));});
+ alignmentCount=computed(()=>selectionUnits(this.positions(),this.activeIds(),this.layout()?.groups).length);
+ selectedBounds=computed(()=>this.activeIds().length>1?selectionBounds(this.positions(),this.activeIds()):null);
+ marquee=signal<{x:number;y:number;width:number;height:number}|null>(null);
+ isSelected(id:string){return this.activeIds().includes(id);}
+ choose(id:string,additive=false){const ids=this.activeIds(),block=expandGroups([id],this.layout()?.groups);this.selectionChange.emit(additive?ids.includes(id)?ids.filter(i=>!block.includes(i)):[...new Set([...ids,...block.filter(i=>i!==id),id])]:ids.includes(id)?[...ids.filter(i=>i!==id),id]:[...block.filter(i=>i!==id),id]);}
+ renameableGroup=computed(()=>{const groups=(this.layout()?.groups??[]).filter(g=>g.members.some(id=>this.activeIds().includes(id)));return groups.length===1?groups[0]:null;});
+ canGroup=computed(()=>{const ids=this.activeIds().filter(id=>this.nodes().find(n=>n.id===id)?.role!=='site');return ids.length>=2&&!this.layout()?.groups?.some(g=>g.members.length===ids.length&&g.members.every(id=>ids.includes(id)));});
+ canUngroup=computed(()=>this.layout()?.groups?.some(g=>g.members.some(id=>this.activeIds().includes(id)))??false);
+ group(){if(!this.editable()||!this.commandsEnabled()||this.mode()!=='move'||!this.canGroup())return;const positions={...arrange(this.nodes()).positions,...this.layout()?.positions},ids=this.activeIds().filter(id=>this.nodes().find(n=>n.id===id)?.role!=='site');let i=1;while(this.layout()?.groups?.some(g=>g.name===this.s.l.t('Gruppe')+' '+i))i++;this.layoutChange.emit(groupSelection({...this.layout(),version:1,positions},ids,this.s.l.t('Gruppe')+' '+i));this.selectionChange.emit(ids);}
+ ungroup(){if(!this.editable()||!this.commandsEnabled()||this.mode()!=='move'||!this.canUngroup())return;this.layoutChange.emit(ungroupSelection({...this.layout(),version:1,positions:{...arrange(this.nodes()).positions,...this.layout()?.positions}},this.activeIds()));this.selectionChange.emit(this.selected()?[this.selected()]:[]);}
+ persistentGroups=computed(()=>(this.layout()?.groups??[]).map(group=>({...group,bounds:selectionBounds(this.positions(),group.members)})).filter(g=>g.bounds));
+
+ clearSelection(){this.selectionChange.emit([]);}
+ selectAll(){if(this.mode()==='move')this.selectionChange.emit(this.nodes().map(n=>n.id));}
+ align(value:string){if(!this.editable()||this.alignmentCount()<2||!['left','center','right','top','middle','bottom'].includes(value))return;this.applyPositions(alignGroups(this.positions(),this.activeIds(),this.layout()?.groups,value as Alignment));}
+ distribute(value:string){if(!this.editable()||this.alignmentCount()<3||!['x','y'].includes(value))return;this.applyPositions(distributeGroups(this.positions(),this.activeIds(),this.layout()?.groups,value as 'x'|'y'));}
+ private applyPositions(changes:Record<string,Point>){const positions=this.positions();if(!Object.entries(changes).some(([id,p])=>p.x!==positions[id]?.x||p.y!==positions[id]?.y))return;this.layoutChange.emit({...this.layout(),version:1,positions:{...positions,...changes}});}
+ canvasKey(event:KeyboardEvent){if(this.viewer())return;if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const item=(event.target as Element).closest('.diagram-equipment'),r=(item??event.currentTarget as Element).getBoundingClientRect();this.showContext(r.x+Math.min(r.width,80),r.y+Math.min(r.height,45),item?.getAttribute('data-node-id')??undefined);return;}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='a'&&this.mode()==='move'){event.preventDefault();this.selectAll();}}
+ escape(){this.hmiLayer?.cancel();this.hmiLayer?.connecting.set(false);this.hmiLayer?.source.set('');if(this.contextPoint()){this.closeContext(true);return;}const gesture=!!this.drag||!!this.source();this.cancel();if(!gesture)this.clearSelection();}
+ clearInteraction(){this.hmiLayer?.connecting.set(false);this.hmiLayer?.source.set('');this.hmiLayer?.cancel();this.cancel();this.wireSelected.set('');}
+ interacting(){return this.drag!==null||!!this.source()||!!this.hmiLayer?.interacting();}
+ name(id:string){const n=this.nodes().find(n=>n.id===id);return n?this.label(n):id;}
+ private drag:{pointerId:number;id:string;start:Point;position:Point;pan?:boolean;moved:boolean;client?:Point;scale?:number;group?:Record<string,Point>;ids?:string[];box?:boolean;base?:string[]}|null=null;
+ positions=computed(()=>({...arrange(this.nodes()).positions,...this.layout()?.positions,...this.preview()}));
+ width=computed(()=>Math.max(1120,...(this.layout()?.hmi?.elements??[]).map(e=>e.x+e.width+100),...Object.values({...arrange(this.nodes()).positions,...this.layout()?.positions}).map(p=>p.x+CARD_W+100)));
+ height=computed(()=>Math.max(640,...(this.layout()?.hmi?.elements??[]).map(e=>e.y+e.height+100),...Object.values({...arrange(this.nodes()).positions,...this.layout()?.positions}).map(p=>p.y+CARD_H+100)));
+ view=computed(()=>`${this.pan().x} ${this.pan().y} ${this.width()/this.zoom()} ${this.height()/this.zoom()}`);
+ wires=computed(()=>this.nodes().filter(n=>['pvArray','pvString'].includes(n.role)&&n.feedsTo&&this.positions()[n.feedsTo]).map(n=>({id:n.id,target:n.feedsTo!,path:wirePath(this.port(n.id,true),this.port(n.feedsTo!,false))})));
+ containment=computed(()=>this.nodes().filter(n=>n.parentId&&this.positions()[n.parentId]).map(n=>({id:n.id,path:wirePath({x:this.positions()[n.parentId!].x+CARD_W/2,y:this.positions()[n.parentId!].y+CARD_H},{x:this.positions()[n.id].x+CARD_W/2,y:this.positions()[n.id].y})})));
+ port(id:string,out:boolean):Point {const p=this.positions()[id];return {x:p.x+(out?CARD_W:0),y:p.y+CARD_H/2};}
+ wireDraft(){return this.source()&&this.pointer()?wirePath(this.port(this.source(),true),this.pointer()!):'';}
+ label(n:InstallationNode){return n.label||n.name;}
+ short(n:InstallationNode){const name=this.label(n);return name.length>23?name.slice(0,21)+'…':name;}
+ role(n:InstallationNode){return ({site:'Solcelleanlegg',zone:'Sone',pvArray:'PV-felt',pvString:'PV-streng',inverter:'Inverter',gridMeter:'Nettmåler',siteController:'Anleggskontroller',weatherStation:'Værstasjon',productionMeter:'Produksjonsmåler',battery:'Batteri',gateway:'Gateway'} as Record<string,string>)[n.role]??n.role;}
+ setMode(mode:'move'|'parent'|'wire'){this.cancel();this.mode.set(mode);this.wireSelected.set('');this.message.set('');}
+ point(event:PointerEvent|DragEvent|WheelEvent):Point {const svg=event.currentTarget as SVGSVGElement;const p=new DOMPoint(event.clientX,event.clientY);const matrix=svg.getScreenCTM();return matrix?p.matrixTransform(matrix.inverse()):{x:0,y:0};}
+ private svgPoint(event:PointerEvent):Point {const svg=(event.currentTarget as SVGElement).ownerSVGElement!;const matrix=svg.getScreenCTM();return matrix?new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()):{x:0,y:0};}
+ hit(p:Point,exclude=''){return [...this.nodes()].reverse().find(n=>{const a=this.positions()[n.id];return n.id!==exclude&&p.x>=a.x&&p.x<=a.x+CARD_W&&p.y>=a.y&&p.y<=a.y+CARD_H;});}
+ start(event:PointerEvent,n:InstallationNode){if(event.button!==0)return;event.stopPropagation();if(this.editable()&&this.hmiLayer?.connecting()){this.hmiLayer.connect(n.id);return;}this.wireSelected.set('');if(this.mode()==='wire'){this.selectionChange.emit([n.id]);if(n.role==='pvArray')this.startWire(n.id);else if(n.role==='inverter')this.finishWire(n.id);return;}if(this.mode()==='parent'){this.selectionChange.emit([n.id]);}else{const additive=event.shiftKey||event.ctrlKey||event.metaKey;this.choose(n.id,additive);if(additive)return;}if(!this.editable())return;const p=this.svgPoint(event),ids=this.mode()==='parent'?[n.id]:this.activeIds().includes(n.id)?this.activeIds():[n.id];this.drag={pointerId:event.pointerId,id:n.id,start:p,position:this.positions()[n.id],moved:false,group:{...this.positions()},ids,scale:(event.currentTarget as SVGElement).ownerSVGElement!.getScreenCTM()?.a??1};(event.currentTarget as SVGElement).ownerSVGElement!.setPointerCapture(event.pointerId);}
+
+ background(event:PointerEvent){if((event.button!==0&&event.button!==1)||(event.button===0&&this.source())||this.drag)return;event.preventDefault();const svg=event.currentTarget as SVGSVGElement;const p=this.point(event);if(this.editable()&&event.button===0&&event.shiftKey&&this.mode()==='move'){this.drag={pointerId:event.pointerId,id:'',start:p,position:p,moved:false,box:true,base:[...this.activeIds()]};this.marquee.set({x:p.x,y:p.y,width:0,height:0});svg.setPointerCapture(event.pointerId);return;}this.drag={pointerId:event.pointerId,id:'',start:p,position:this.pan(),pan:true,moved:false,client:{x:event.clientX,y:event.clientY},scale:svg.getScreenCTM()?.a??1};this.panning.set(true);svg.setPointerCapture(event.pointerId);if(event.button===0)this.wireSelected.set('');}
+ move(event:PointerEvent){const d=this.drag;if(d&&d.pointerId!==event.pointerId)return;
+ if(d?.pan){this.pan.set({x:d.position.x-(event.clientX-d.client!.x)/d.scale!,y:d.position.y-(event.clientY-d.client!.y)/d.scale!});return;}
+ const p=this.point(event);if(d?.box){this.marquee.set({x:Math.min(d.start.x,p.x),y:Math.min(d.start.y,p.y),width:Math.abs(p.x-d.start.x),height:Math.abs(p.y-d.start.y)});return;}this.pointer.set(p);if(this.source()){this.hover.set((dcTarget(this.nodes(),this.positions(),p)??this.hit(p))?.id??'');return;}if(!d)return;const dx=p.x-d.start.x,dy=p.y-d.start.y;d.moved ||= Math.hypot(dx,dy)>4;if(this.mode()==='parent'){this.hover.set(this.hit(p,d.id)?.id??'');return;}if(d.moved){const preferences=this.snapping(),result=snapSelection(d.group!,d.ids!,d.id,{x:dx,y:dy},{grid:preferences.grid&&!event.altKey,guides:preferences.guides&&!event.altKey,tolerance:6/(d.scale??1)});this.preview.set(result.positions);this.guides.set(result.guides);}}
+ end(event:PointerEvent){this.guides.set([]);const d=this.drag;if(d&&d.pointerId!==event.pointerId)return;if(d?.pan){this.drag=null;this.panning.set(false);return;}const p=this.point(event);if(d?.box){this.drag=null;this.marquee.set(null);this.selectionChange.emit(expandGroups([...new Set([...(d.base??[]),...boxedSelection(this.positions(),d.start,p)])],this.layout()?.groups));return;}if(this.source()){const target=dcTarget(this.nodes(),this.positions(),p)??this.hit(p);if(target?.role==='inverter')this.finishWire(target.id);else if(target?.id!==this.source())this.message.set('Velg en inverter som DC-mottaker.');return;}this.drag=null;if(!d)return;if(d.moved){if(this.mode()==='parent'){const target=this.hit(p,d.id);if(target&&canParent(this.nodes(),d.id,target.id)){this.parentChange.emit({id:d.id,parentId:target.id});this.message.set('Tilhørigheten er endret i utkastet.');}else this.message.set('Slipp på et asset utenfor utstyrets eget underhierarki.');}else this.commitPositions();}this.preview.set({});this.hover.set('');}
+ lostCapture(){this.guides.set([]);if(this.drag?.pan){this.drag=null;this.panning.set(false);}else if(this.drag){this.drag=null;this.marquee.set(null);this.preview.set({});this.hover.set('');}}
+ selectWire(event:PointerEvent,id:string){if(event.button!==0)return;event.stopPropagation();this.wireSelected.set(id);}
+ portDown(event:PointerEvent,id:string,out:boolean){if(event.button!==0)return;event.stopPropagation();if(out)this.startWire(id);else this.finishWire(id);}
+ wheel(event:WheelEvent){event.preventDefault();if(this.drag||!event.deltaY)return;const anchor=this.point(event),svg=event.currentTarget as SVGSVGElement;const next=zoomAt(this.pan(),this.zoom(),wheelZoom(this.zoom(),event.deltaY,event.deltaMode,svg.clientHeight),anchor);this.pan.set(next.pan);this.zoom.set(next.zoom);if(this.source()){this.pointer.set(anchor);this.hover.set((dcTarget(this.nodes(),this.positions(),anchor)??this.hit(anchor))?.id??'');}}
+
+ startWire(id:string){if(!this.editable())return;this.source.set(id);this.pointer.set(this.port(id,true));this.message.set('Velg DC IN på en inverter. Esc avbryter.');}
+ finishWire(target:string){const id=this.source();if(!this.editable()||!id)return;if(canFeed(this.nodes(),id,target)){this.feedChange.emit({id,feedsTo:target});this.cancel();this.message.set('DC-forbindelsen er endret i utkastet.');}else this.message.set('PV-felt kan bare kobles til en inverter.');}
+ cancel(){this.closeContext();this.guides.set([]);this.marquee.set(null);this.message.set('');this.source.set('');this.hover.set('');this.pointer.set(null);this.drag=null;this.panning.set(false);this.preview.set({});}
+ commitPositions(){this.layoutChange.emit({...this.layout(),version:1,positions:Object.fromEntries(this.nodes().map(n=>[n.id,this.positions()[n.id]]))});}
+ arrange(){if(this.editable()){this.layoutChange.emit({...this.layout(),...arrange(this.nodes())});this.fit();}}
+ fit(){this.zoom.set(1);this.pan.set({x:0,y:0});}
+ scale(delta:number){if(this.drag)return;const old=this.zoom(),p=this.pan(),anchor={x:p.x+this.width()/old/2,y:p.y+this.height()/old/2},next=zoomAt(p,old,old+delta,anchor);this.pan.set(next.pan);this.zoom.set(next.zoom);}
+
+ key(event:KeyboardEvent,n:InstallationNode){if(event.key==='Escape')return;if(event.key==='Enter'||event.key===' '){event.preventDefault();if(this.editable()&&this.hmiLayer?.connecting()){this.hmiLayer.connect(n.id);return;}if(this.mode()==='wire'){this.selectionChange.emit([n.id]);if(n.role==='pvArray')this.startWire(n.id);if(n.role==='inverter')this.finishWire(n.id);}else this.choose(n.id,event.shiftKey||event.ctrlKey||event.metaKey);return;}const direction:Record<string,Point>={ArrowLeft:{x:-20,y:0},ArrowRight:{x:20,y:0},ArrowUp:{x:0,y:-20},ArrowDown:{x:0,y:20}};const delta=direction[event.key];if(delta&&this.editable()&&this.mode()==='move'){event.preventDefault();const ids=this.isSelected(n.id)?this.activeIds():[n.id];const step=this.snapping().grid?1:(event.shiftKey?.5:.05);this.applyPositions(moveSelection(this.positions(),ids,{x:delta.x*step,y:delta.y*step},this.snapping().grid));}}
+
+ palette(event:DragEvent,kind:string){event.dataTransfer?.setData('application/solarops-equipment',kind);if(event.dataTransfer)event.dataTransfer.effectAllowed='copy';}
+ over(event:DragEvent){if(!this.editable())return;event.preventDefault();const n=this.hit(this.point(event));this.hover.set(n?.entityType==='ASSET'?n.id:'');}
+ drop(event:DragEvent){event.preventDefault();this.hover.set('');if(!this.editable())return;const kind=event.dataTransfer?.getData('application/solarops-equipment');if(!kind||!['zone','pvArray','device'].includes(kind))return;const point=snap(this.point(event)),parent=this.hit(point);this.addEquipment.emit({kind,parentId:parent?.entityType==='ASSET'?parent.id:undefined,point});}
+ disconnect(){if(this.nodes().find(n=>n.id===this.wireSelected())?.role==='pvString'){this.message.set('Endre strengtilkoblingen i inverterveiviseren.');return;}if(this.editable()&&this.wireSelected()){this.feedChange.emit({id:this.wireSelected(),feedsTo:null});this.wireSelected.set('');}}
+ validTarget(id:string){return this.source()?canFeed(this.nodes(),this.source(),id):!!this.drag&&canParent(this.nodes(),this.drag.id,id);}
+}

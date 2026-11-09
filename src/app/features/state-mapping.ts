@@ -1,0 +1,11 @@
+import {Component,input,output,signal} from '@angular/core';
+import {TranslatePipe} from '../core/locale';
+import {operatingModes,stateNames,type State} from '../domain/solar';
+@Component({selector:'state-mapping',imports:[TranslatePipe],template:`<details class="state-mapping-editor"><summary>{{'Kartlegging av driftsmodus' | t}}</summary><p>{{'Bruk normaliserte modusverdier fra ThingsBoard, eller kartlegg bekreftede råkoder her. Kartleggingen lagres på enheten i ThingsBoard.' | t}}</p><p class="fine-print">{{'Eksisterende verifisert profil beholdes. Ukjente leverandørkoder gjettes ikke.' | t}}</p><fieldset [disabled]="disabled()">@for(row of rows();track row[0]){<div class="state-map-row"><code>{{row[0]}}</code><select [attr.aria-label]="('Driftsmodus' | t)+' · '+row[0]" [value]="row[1]" (change)="set(row[0],$any($event.target).value)">@for(mode of modes;track mode){<option [value]="mode" [selected]="row[1]===mode">{{names[mode] | t}}</option>}</select><button type="button" [attr.aria-label]="('Fjern kode' | t)+' '+row[0]" (click)="remove(row[0])">×</button></div>}<div class="state-map-new"><label>{{'Rå kode eller verdi' | t}}<input maxlength="64" [value]="code()" (input)="code.set($any($event.target).value)"></label><label>{{'Driftsmodus' | t}}<select [value]="mode()" (change)="mode.set($any($event.target).value)">@for(value of modes;track value){<option [value]="value" [selected]="mode()===value">{{names[value] | t}}</option>}</select></label><button type="button" [disabled]="!code().trim()||rows().length>=64" (click)="add()">{{'Legg til kode' | t}}</button></div></fieldset></details>`})
+export class StateMappingEditor {
+ mapping=input<Record<string,State>>({});disabled=input(false);changed=output<Record<string,State>>();code=signal('');mode=signal<State>('unknown');modes=operatingModes;names=stateNames;
+ rows(){return Object.entries(this.mapping());}
+ set(code:string,mode:State){if(this.disabled()||!this.modes.includes(mode))return;this.changed.emit({...this.mapping(),[code]:mode});}
+ remove(code:string){if(this.disabled())return;const next={...this.mapping()};delete next[code];this.changed.emit(next);}
+ add(){const raw=this.code().trim();if(!raw||raw.length>64||this.rows().length>=64)return;const code=Number.isFinite(Number(raw))?String(Number(raw)):raw;this.set(code,this.mode());this.code.set('');}
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:solarops:string-configuration:1",
+  "title": "SolarOps PV string module group v1",
+  "type": "object",
+  "required": [
+    "version",
+    "mpptId",
+    "inputId",
+    "moduleManufacturer",
+    "moduleModel",
+    "moduleCount",
+    "modulePowerW",
+    "azimuth",
+    "tilt"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "mpptId": {
+      "type": "string",
+      "pattern": "^[-a-z0-9]{1,60}$"
+    },
+    "inputId": {
+      "type": "string",
+      "pattern": "^[-a-z0-9]{1,60}$"
+    },
+    "moduleManufacturer": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "moduleModel": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "moduleCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "modulePowerW": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 2000
+    },
+    "azimuth": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "exclusiveMaximum": 360
+    },
+    "tilt": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 90
+    }
+  }
+}

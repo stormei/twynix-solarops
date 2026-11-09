@@ -1,0 +1,8 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {measurementReadiness} from '../src/app/domain/onboarding.ts';
+import type {CommissionRow} from '../src/app/domain/commission.ts';
+const row:CommissionRow={equipmentKey:'inv-1',role:'inverter',kind:'device',deviceId:'inverter',name:'Inverter',mapping:{acPower:{key:'ActualPower',unit:'W'},lifetimeEnergy:{key:'Energy',unit:'kWh'},runFeedback:{key:'Run',unit:''}}};
+const info={keys:['ActualPower','Energy','Run'],latest:{ActualPower:[{ts:Date.now(),value:1234}]}};
+test('first-time setup requires a real numeric AC measurement, not an invented zero',()=>{assert.equal(measurementReadiness(row,info).errors.length,0);assert.equal(measurementReadiness(row,{...info,latest:{ActualPower:[{ts:1,value:0}]}}).errors.length,0);for(const value of [null,'',true,'bad'])assert.equal(measurementReadiness(row,{...info,latest:{ActualPower:[{ts:1,value}]}}).errors.length,1);assert.equal(measurementReadiness(row,{...info,keys:['Other']}).errors.length,1);assert.equal(measurementReadiness(row).errors.length,1);});
+test('energy and state omissions are explicit optional warnings and passive PV arrays need no device',()=>{const minimal={...row,mapping:{acPower:row.mapping.acPower}};assert.equal(measurementReadiness(minimal,info).errors.length,0);assert.equal(measurementReadiness(minimal,info).warnings.length,2);assert.equal(measurementReadiness({...row,kind:'asset',role:'pvArray',deviceId:undefined,mapping:{}}).errors.length,0);assert.equal(measurementReadiness({...row,kind:'asset',role:'pvArray',deviceId:undefined,measurementDeviceId:'sensor',mapping:{}}).errors.length,1);});
